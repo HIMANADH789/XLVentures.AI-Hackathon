@@ -1,0 +1,11 @@
+langgraph
+langchain-openai
+langchain
+langchain-groq
+langchain-core
+firecrawl-py
+streamlit
+pydantic
+python-dotenv
+requests
+redis

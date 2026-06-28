@@ -1,0 +1,123 @@
+{
+	"info": {
+		"name": "ProspectOS Phase 1",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check (DB)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/health/db",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"health",
+						"db"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Health Check (Services)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/health/services",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"health",
+						"services"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Discover (Fresh)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"company_inputs\": [\n    {\n      \"url\": \"https://acme.ai\",\n      \"source\": \"manual\"\n    }\n  ],\n  \"force_refresh\": false\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/discover",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"discover"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Discover (Duplicate Check)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"company_inputs\": [\n    {\n      \"url\": \"https://acme.ai\",\n      \"source\": \"manual\"\n    }\n  ],\n  \"force_refresh\": false\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/discover",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"discover"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Companies",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/companies",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"companies"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

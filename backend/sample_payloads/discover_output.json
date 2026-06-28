@@ -1,0 +1,16 @@
+{
+  "company": "Acme AI",
+  "trigger": "Raised Series A",
+  "score": 91,
+  "summary": "Acme AI recently raised a $15M Series A and is hiring SDRs.",
+  "status": "enriched",
+  "contacts": [
+    {
+      "name": "John Doe",
+      "role": "Founder/CEO",
+      "email": "john@acme.ai",
+      "linkedin": "linkedin.com/in/johndoe",
+      "phone": null
+    }
+  ]
+}

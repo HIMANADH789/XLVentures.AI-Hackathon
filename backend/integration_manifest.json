@@ -1,0 +1,14 @@
+{
+  "backend_version": "v1",
+  "ai_contract_version": "v1",
+  "frontend_contract_version": "v1",
+  "routes": [
+    "/discover",
+    "/companies",
+    "/companies/{id}",
+    "/contacts",
+    "/health",
+    "/health/db",
+    "/health/services"
+  ]
+}

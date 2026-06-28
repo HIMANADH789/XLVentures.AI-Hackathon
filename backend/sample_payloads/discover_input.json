@@ -1,0 +1,9 @@
+{
+  "company_inputs": [
+    {
+      "url": "https://acme.ai",
+      "source": "manual"
+    }
+  ],
+  "force_refresh": false
+}

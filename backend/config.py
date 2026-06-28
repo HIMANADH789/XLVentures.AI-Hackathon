@@ -1,0 +1,24 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    database_url: str = "sqlite:///./prospectos.db"
+    ai_pipeline_version: str = "v1"
+    
+    # LLM Configuration
+    llm_provider: str = "openai" # Options: openai, groq
+    openai_api_key: str = ""
+    groq_api_key: str = ""
+    
+    # External APIs
+    apollo_api_key: str = ""
+    hunter_api_key: str = ""
+    firecrawl_api_key: str = ""
+    news_api_key: str = ""
+    
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8')
+
+settings = Settings()
