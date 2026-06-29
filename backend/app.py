@@ -3,13 +3,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
-from routes import discover, companies, contacts
+from routes import discover, companies, contacts, settings
 import models.company
 import models.contact
 import models.discovery_log
 import models.icp_config
 
-# Create DB tables
+# Create DB tables (safe for schema additions)
+import sqlalchemy as sa
+try:
+    inspector = sa.inspect(engine)
+    if "companies" in inspector.get_table_names() and "approval_status" not in [c["name"] for c in inspector.get_columns("companies")]:
+        with engine.connect() as conn:
+            conn.execute(sa.text("ALTER TABLE companies ADD COLUMN approval_status VARCHAR DEFAULT 'pending'"))
+            conn.commit()
+except Exception:
+    pass
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -33,6 +43,7 @@ app.add_middleware(
 app.include_router(discover.router)
 app.include_router(companies.router)
 app.include_router(contacts.router)
+app.include_router(settings.router)
 
 @app.get("/health")
 def health_check():
@@ -50,6 +61,5 @@ def health_db(db: Session = Depends(get_db)):
 def health_services():
     return {
         "ai": "ok",
-        "apollo": "ok",
         "hunter": "ok"
     }

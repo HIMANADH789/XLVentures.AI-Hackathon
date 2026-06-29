@@ -22,7 +22,10 @@ import {
   ExternalLink,
   Copy,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  ListChecks,
+  MessageSquare,
+  Lightbulb
 } from "lucide-react";
 
 interface CompanyDrawerProps {
@@ -162,6 +165,64 @@ export function CompanyDrawer({ company, open, onOpenChange, isLoadingDetails = 
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Execution Plan (after enrichment) */}
+              {company.execution_plan && company.execution_plan.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 select-none">
+                    <ListChecks className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Enrichment Plan</span>
+                  </h4>
+                  <Card className="border border-border bg-card">
+                    <CardContent className="p-3 space-y-2">
+                      {company.execution_plan.map((step, idx) => (
+                        <div key={idx} className="flex items-start gap-2.5">
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-500 text-[10px] font-bold">
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold text-foreground capitalize">{step.tool.replace(/_/g, " ")}</span>
+                            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{step.reason}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Recommended Next Action */}
+              {company.recommended_action && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 select-none">
+                    <Lightbulb className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Recommended Action</span>
+                  </h4>
+                  <Card className="border border-emerald-500/10 bg-emerald-500/5">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="success" className="text-[10px] uppercase">
+                          {company.recommended_action.action_type || "Email"}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {company.recommended_action.reasoning || ""}
+                        </span>
+                      </div>
+                      {company.recommended_action.draft_message && (
+                        <div className="mt-2 rounded-lg border border-border bg-background p-3">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Draft Message</span>
+                          </div>
+                          <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                            {company.recommended_action.draft_message}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               {/* Pipeline Metadata Card */}
               <div className="space-y-2">

@@ -7,25 +7,32 @@ import { LeadTable } from "@/components/table/lead-table";
 import { CompanyDrawer } from "@/components/company/company-drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCompanies } from "@/hooks/use-companies";
 import { Company } from "@/types/company";
 import { apiService } from "@/services/api";
-import { Search, SlidersHorizontal, Sparkles, RefreshCw, X } from "lucide-react";
+import { Search, SlidersHorizontal, RefreshCw, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DiscoveryDialog } from "@/components/ui/discovery-dialog";
+import { PipelineStatusBar } from "@/components/discovery/pipeline-status-bar";
+import { PendingReviews } from "@/components/discovery/pending-reviews";
+import { IcpSettingsPanel } from "@/components/settings/icp-settings-panel";
 
 export default function DashboardPage() {
   const {
     companies,
+    pendingReviews,
     filteredCompanies,
     uniqueIndustries,
     uniqueTriggers,
     isLoading,
     error,
+    searchInput,
+    setSearchInput,
     searchQuery,
-    setSearchQuery,
     selectedIndustry,
     setSelectedIndustry,
     selectedTrigger,
@@ -35,13 +42,18 @@ export default function DashboardPage() {
     selectedScore,
     setSelectedScore,
     isDiscovering,
+    approvalLoading,
+    activePipelineId,
+    clearActivePipeline,
     runDiscovery,
+    approveCompany,
+    rejectCompany,
+    rescoreCompany,
     resetFilters,
     refetch
   } = useCompanies();
 
   // Focus reference for search input (global search command hotkey)
-  const searchInputRef = React.useState<HTMLInputElement | null>(null);
   const localSearchInputRef = React.useRef<HTMLInputElement>(null);
   
   // Selected company details state
@@ -49,6 +61,10 @@ export default function DashboardPage() {
   const [isDrawerOpen, setIsDrawerOpen] = React.useState<boolean>(false);
   const [isLoadingDetails, setIsLoadingDetails] = React.useState<boolean>(false);
   const [toast, setToast] = React.useState<{ message: string; type: "success" | "error" } | null>(null);
+  
+  // Discovery dialog state
+  const [isDiscoveryOpen, setIsDiscoveryOpen] = React.useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     if (toast) {
@@ -90,12 +106,14 @@ export default function DashboardPage() {
     localSearchInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const handleNavbarRunDiscovery = async () => {
-    const url = window.prompt("Enter company website URL to discover (e.g. https://acme.ai):", "https://acme.ai");
-    if (!url) return;
+  const handleNavbarRunDiscovery = () => {
+    setIsDiscoveryOpen(true);
+  };
+
+  const handleDiscoverySubmit = async (urls: string[]) => {
+    setIsDiscoveryOpen(false);
     try {
-      await runDiscovery(url);
-      setToast({ message: "Discovery completed successfully.", type: "success" });
+      await runDiscovery(urls);
     } catch (err: any) {
       console.error("Discovery run error:", err);
       const errMsg = err?.response?.data?.detail || err?.message || "Unknown error occurred";
@@ -103,7 +121,16 @@ export default function DashboardPage() {
     }
   };
 
-  const hasActiveFilters = searchQuery !== "" || selectedIndustry !== "all" || selectedTrigger !== "all" || selectedQualified !== "all" || selectedScore !== "all";
+  const handlePipelineDismiss = () => {
+    clearActivePipeline();
+  };
+
+  const handlePipelineComplete = () => {
+    refetch();
+    setToast({ message: "Discovery completed successfully.", type: "success" });
+  };
+
+  const hasActiveFilters = searchInput !== "" || selectedIndustry !== "all" || selectedTrigger !== "all" || selectedQualified !== "all" || selectedScore !== "all";
 
   return (
     <div className="flex-1 flex flex-col min-h-screen relative">
@@ -129,6 +156,7 @@ export default function DashboardPage() {
       <Navbar
         onSearchClick={handleGlobalSearchClick}
         onRunDiscovery={handleNavbarRunDiscovery}
+        onSettingsClick={() => setIsSettingsOpen(true)}
         isDiscovering={isDiscovering}
       />
 
@@ -161,28 +189,50 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        {/* Aggregated Metrics Section */}
-        {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-4 rounded-full" />
+        {/* Pipeline Status Bar — inline during discovery */}
+        {activePipelineId && (
+          <PipelineStatusBar
+            pipelineId={activePipelineId}
+            onDismiss={handlePipelineDismiss}
+            onComplete={handlePipelineComplete}
+          />
+        )}
+
+        <ErrorBoundary>
+          {/* Aggregated Metrics Section */}
+          {isLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-4 rounded-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-7 w-12" />
+                    <Skeleton className="h-3.5 w-32" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-7 w-12" />
-                  <Skeleton className="h-3.5 w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center text-xs text-destructive">
-            Could not calculate business metrics due to connection error.
-          </div>
-        ) : (
-          <StatsCards companies={filteredCompanies} />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center text-xs text-destructive">
+              Could not calculate business metrics due to connection error.
+            </div>
+          ) : (
+            <StatsCards companies={filteredCompanies} />
+          )}
+        </ErrorBoundary>
+
+        {/* Pending Reviews Section */}
+        {!isLoading && !error && pendingReviews.length > 0 && (
+          <PendingReviews
+            companies={pendingReviews}
+            approvalLoading={approvalLoading}
+            onApprove={approveCompany}
+            onReject={rejectCompany}
+            onRescore={rescoreCompany}
+          />
         )}
 
         {/* Search, Filter Bar and Query Controls */}
@@ -190,24 +240,24 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Search Input Box */}
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={localSearchInputRef}
-                type="text"
-                placeholder="Search by company, industry, or trigger..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-8 h-9 rounded-lg border-input placeholder:text-muted-foreground/70"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  ref={localSearchInputRef}
+                  type="text"
+                  placeholder="Search by company, industry, or trigger..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="pl-9 pr-8 h-9 rounded-lg border-input placeholder:text-muted-foreground/70"
+                />
+                {searchInput && (
+                  <button
+                    onClick={() => setSearchInput("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
 
             {/* Quick Filters Group */}
             <div className="flex flex-wrap items-center gap-2">
@@ -283,57 +333,44 @@ export default function DashboardPage() {
         </div>
 
         {/* Lead Table / States Section */}
-        {isLoading || isDiscovering ? (
-          <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-            <div className="border-b border-border bg-muted/40 px-6 py-4 flex items-center justify-between">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className={`h-4.5 ${i === 0 ? "w-28" : i === 1 ? "w-20" : i === 2 ? "w-32" : "w-16"}`} />
-              ))}
-            </div>
-            <div className="divide-y divide-border px-6">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="py-4.5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-8 w-8 rounded-full" />
-                    <div className="space-y-1.5">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-3 w-20" />
+        <ErrorBoundary>
+          {isLoading || isDiscovering ? (
+            <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+              <div className="border-b border-border bg-muted/40 px-6 py-4 flex items-center justify-between">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className={`h-4.5 ${i === 0 ? "w-28" : i === 1 ? "w-20" : i === 2 ? "w-32" : "w-16"}`} />
+                ))}
+              </div>
+              <div className="divide-y divide-border px-6">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="py-4.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
                     </div>
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-32 rounded-full" />
+                    <Skeleton className="h-4 w-12" />
+                    <Skeleton className="h-5 w-10 rounded-full" />
                   </div>
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-32 rounded-full" />
-                  <Skeleton className="h-4 w-12" />
-                  <Skeleton className="h-5 w-10 rounded-full" />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ) : error ? (
-          <ErrorState onRetry={refetch} description={error} />
-        ) : filteredCompanies.length === 0 ? (
-          <EmptyState onAction={resetFilters} />
-        ) : (
-          <LeadTable
-            data={filteredCompanies}
-            onViewCompany={handleViewCompany}
-          />
-        )}
+          ) : error ? (
+            <ErrorState onRetry={refetch} description={error} />
+          ) : filteredCompanies.length === 0 ? (
+            <EmptyState onAction={resetFilters} />
+          ) : (
+            <LeadTable
+              data={filteredCompanies}
+              onViewCompany={handleViewCompany}
+            />
+          )}
+        </ErrorBoundary>
       </main>
-
-      {/* Floating Insight Banner when Discovery is running */}
-      {isDiscovering && (
-        <div className="fixed bottom-4 right-4 z-45 bg-indigo-600 text-white rounded-xl shadow-2xl p-4 border border-indigo-400/20 max-w-sm flex items-center gap-3.5 animate-in slide-in-from-bottom duration-300">
-          <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center animate-spin">
-            <Sparkles className="h-4.5 w-4.5 text-indigo-200 animate-pulse" />
-          </div>
-          <div className="flex-1">
-            <h5 className="text-xs font-bold font-sans">Enriching company data...</h5>
-            <p className="text-[10px] text-indigo-200 font-medium mt-0.5">
-              ProspectIQ Agent is querying API endpoints and scrapers.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Slide-out details drawer */}
       <CompanyDrawer
@@ -341,6 +378,20 @@ export default function DashboardPage() {
         open={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         isLoadingDetails={isLoadingDetails}
+      />
+
+      {/* Discovery modal dialog */}
+      <DiscoveryDialog
+        open={isDiscoveryOpen}
+        onOpenChange={setIsDiscoveryOpen}
+        onSubmit={handleDiscoverySubmit}
+        isDiscovering={isDiscovering}
+      />
+
+      {/* Settings panel */}
+      <IcpSettingsPanel
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
       />
     </div>
   );

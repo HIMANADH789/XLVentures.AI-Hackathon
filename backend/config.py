@@ -9,12 +9,9 @@ class Settings(BaseSettings):
     ai_pipeline_version: str = "v1"
     
     # LLM Configuration
-    llm_provider: str = "openai" # Options: openai, groq
-    openai_api_key: str = ""
     groq_api_key: str = ""
     
     # External APIs
-    apollo_api_key: str = ""
     hunter_api_key: str = ""
     firecrawl_api_key: str = ""
     news_api_key: str = ""

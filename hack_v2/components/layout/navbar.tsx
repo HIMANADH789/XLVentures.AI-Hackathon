@@ -2,17 +2,18 @@
 
 import * as React from "react";
 import { useTheme } from "next-themes";
-import { Search, Sun, Moon, Sparkles } from "lucide-react";
+import { Search, Sun, Moon, Sparkles, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface NavbarProps {
   onSearchClick?: () => void;
   onRunDiscovery?: () => void;
+  onSettingsClick?: () => void;
   isDiscovering?: boolean;
 }
 
-export function Navbar({ onSearchClick, onRunDiscovery, isDiscovering = false }: NavbarProps) {
+export function Navbar({ onSearchClick, onRunDiscovery, onSettingsClick, isDiscovering = false }: NavbarProps) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -57,6 +58,17 @@ export function Navbar({ onSearchClick, onRunDiscovery, isDiscovering = false }:
               ⌘K
             </kbd>
           </button>
+
+          {/* Settings Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onSettingsClick}
+            className="h-9 w-9 rounded-lg border border-border bg-background/50 cursor-pointer"
+            aria-label="Settings"
+          >
+            <Settings2 className="h-[18px] w-[18px] text-muted-foreground" />
+          </Button>
 
           {/* Theme Toggle with Rotation Icon Animation */}
           <Button

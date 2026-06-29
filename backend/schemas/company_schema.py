@@ -16,8 +16,15 @@ class CompanyBase(BaseModel):
     summary_confidence: Optional[float] = None
     icp_score: Optional[float] = None
     qualified: Optional[bool] = None
+    trigger_score: Optional[float] = None
+    industry_score: Optional[float] = None
+    employee_score: Optional[float] = None
     summary: Optional[str] = None
     status: Optional[str] = None
+    approval_status: Optional[str] = None
+    recommended_action: Optional[dict] = None
+    execution_plan: Optional[list] = None
+    prospect_intelligence: Optional[dict] = None
     created_at: Optional[datetime] = None
     firecrawl_used: Optional[bool] = None
     news_used: Optional[bool] = None

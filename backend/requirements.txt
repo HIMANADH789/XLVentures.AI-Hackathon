@@ -8,3 +8,5 @@ python-dotenv
 requests
 httpx
 pytest
+beautifulsoup4
+lxml

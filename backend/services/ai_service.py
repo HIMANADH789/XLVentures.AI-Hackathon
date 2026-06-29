@@ -1,33 +1,20 @@
 import os
-import sys
 from datetime import datetime
 from config import settings
 from utils.retry import with_retries
+from agents.agents.trigger_agent import extract_triggers
+from agents.agents.icp_agent import qualify_lead
+from agents.agents.summary_agent import generate_summary
+from agents.utils.formatters import extract_json
 
-# Add agents_code to path to import Venu agents
-AGENTS_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../agents_code'))
-if AGENTS_PATH not in sys.path:
-    sys.path.insert(0, AGENTS_PATH)
-
-# Temporarily remove backend's app module from sys.modules to avoid namespace collision with agents_code/app
-backup_app = sys.modules.pop('app', None)
-try:
-    from app.agents.trigger_agent import extract_triggers
-    from app.agents.icp_agent import qualify_lead
-    from app.agents.summary_agent import generate_summary
-finally:
-    if backup_app is not None:
-        sys.modules['app'] = backup_app
-
-# Strict Interface Versioning
 AI_PIPELINE_VERSION = settings.ai_pipeline_version
 
 _last_metadata = {}
 
 @with_retries(max_retries=3, initial_delay=1.0)
 def get_trigger(company_url: str) -> dict:
-    if not os.getenv("OPENAI_API_KEY") and not os.getenv("GROQ_API_KEY"):
-        raise ValueError("AI Agent initialization failed: Both OPENAI_API_KEY and GROQ_API_KEY are missing from configuration.")
+    if not os.getenv("GROQ_API_KEY"):
+        raise ValueError("AI Agent initialization failed: GROQ_API_KEY is missing from configuration.")
 
     state = {
         "company_url": company_url,
@@ -118,25 +105,16 @@ def get_summary(company_data: dict) -> dict:
 
 @with_retries(max_retries=3, initial_delay=1.0)
 def analyze_company_pipeline(company_url: str, website_content: str, news: list, contacts: list) -> dict:
-    """Analyze company using website content, news, and contact list via dynamic LLM."""
-    if not os.getenv("OPENAI_API_KEY") and not os.getenv("GROQ_API_KEY"):
-        raise ValueError("AI Agent initialization failed: Both OPENAI_API_KEY and GROQ_API_KEY are missing from configuration.")
+    """Analyze company using website content, news, and contact list via Groq."""
+    if not os.getenv("GROQ_API_KEY"):
+        raise ValueError("AI Agent initialization failed: GROQ_API_KEY is missing from configuration.")
 
-    llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
-    if llm_provider == "openai" and os.getenv("OPENAI_API_KEY"):
-        from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            temperature=0.0
-        )
-    else:
-        from langchain_groq import ChatGroq
-        llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=os.getenv("GROQ_API_KEY"),
-            temperature=0.0
-        )
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.0
+    )
 
     print("[PIPELINE] LLM model initialized")
     
@@ -212,7 +190,6 @@ Contacts:
 """
 
     from langchain_core.messages import SystemMessage, HumanMessage
-    from app.utils.formatters import extract_json
 
     messages = [
         SystemMessage(content=system_prompt),

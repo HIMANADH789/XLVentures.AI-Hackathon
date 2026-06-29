@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 import os
-from services.company_service import enrich_contacts
+from services.company_service import enrich_contacts, scrape_employee_count
 from models.company import Company
 from models.contact import Contact
 from models.discovery_log import DiscoveryLog
@@ -13,7 +13,100 @@ import time
 from config import settings
 from services.news_service import search_news
 from services.ai_service import analyze_company_pipeline
-from app.tools.scraper import discover_and_scrape, _scrape_page
+from agents.tools.scraper import discover_and_scrape, _scrape_page
+from services.pipeline_tracker import (
+    start_stage, complete_stage, fail_stage,
+    complete_pipeline, fail_pipeline,
+)
+
+def _collect_discovery_data(url: str, db=None, pipeline_id: str = None) -> dict:
+    """Collect website content, news, and contacts for a given URL.
+    
+    This is the shared data collection step for both the legacy orchestrator
+    and the new LangGraph-based pipeline.
+    Accepts optional pipeline_id to track sub-stage timing.
+    """
+    from datetime import datetime
+    from urllib.parse import urlparse
+    from services.news_service import search_news
+    from agents.tools.scraper import discover_and_scrape, _scrape_page
+    from services.pipeline_tracker import start_stage, complete_stage
+    import os
+    import time
+
+    parsed_url = urlparse(url)
+    domain = parsed_url.netloc or parsed_url.path
+    if domain.startswith("www."):
+        domain = domain[4:]
+    name_query = resolve_company_name(url)
+
+    collected = {
+        "website_content": "",
+        "news_data": [],
+        "contacts_data": [],
+        "firecrawl_used": False,
+        "news_used": False,
+        "news_headlines": None,
+        "domain": domain,
+        "name_query": name_query,
+    }
+
+    # 1. Firecrawl / HTTP scrape
+    if pipeline_id:
+        start_stage(pipeline_id, "scraping")
+    try:
+        fc_key = settings.firecrawl_api_key or os.getenv("FIRECRAWL_API_KEY")
+        website_content = discover_and_scrape(url)
+        if fc_key:
+            collected["firecrawl_used"] = True
+        collected["website_content"] = website_content
+    except Exception:
+        try:
+            collected["website_content"] = _scrape_page(None, url)
+        except Exception:
+            collected["website_content"] = ""
+    if pipeline_id:
+        complete_stage(pipeline_id, "scraping", f"Scraped {domain}")
+
+    # 2. NewsAPI search
+    if pipeline_id:
+        start_stage(pipeline_id, "news_search")
+    news_count = 0
+    try:
+        news_data = search_news(name_query)
+        collected["news_data"] = news_data
+        news_count = len(news_data)
+        collected["news_used"] = news_count > 0
+        headlines = [art.get("title") for art in news_data if art.get("title")]
+        collected["news_headlines"] = " | ".join(headlines[:5]) if headlines else None
+    except Exception:
+        news_data = []
+        collected["news_data"] = []
+    if pipeline_id:
+        complete_stage(pipeline_id, "news_search", f"Found {news_count} news articles")
+
+    # 3. Hunter contact enrichment
+    if pipeline_id:
+        start_stage(pipeline_id, "contact_finding")
+    contact_count = 0
+    try:
+        contacts_data = enrich_contacts(domain)
+        collected["contacts_data"] = contacts_data
+        contact_count = len(contacts_data)
+    except Exception:
+        contacts_data = []
+        collected["contacts_data"] = []
+    if pipeline_id:
+        source = contacts_data[0].get("source", "Hunter") if contacts_data else "Hunter"
+        complete_stage(pipeline_id, "contact_finding", f"Found {contact_count} contacts via {source}")
+
+    # 4. bs4-based employee count scrape
+    emp_count = scrape_employee_count(url)
+    if emp_count:
+        collected["employee_count"] = emp_count
+
+    return collected
+
 
 def resolve_company_name(url: str) -> str:
     parsed_url = urlparse(url)
@@ -27,7 +120,7 @@ def resolve_company_name(url: str) -> str:
         return parts[-2].capitalize()
     return parts[0].capitalize()
 
-def process_discovery(company_inputs: list, force_refresh: bool, db: Session) -> list:
+def process_discovery(company_inputs: list, force_refresh: bool, db: Session, pipeline_id: str = None) -> list:
     log_discovery_step(status="Discovery started", companies_found=len(company_inputs))
     results = []
     
@@ -37,6 +130,9 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
         
         try:
             total_start = time.time()
+            
+            if pipeline_id:
+                start_stage(pipeline_id, "scraping")
             
             # Extract domain and name query
             parsed_url = urlparse(url)
@@ -97,6 +193,9 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
             fc_duration = time.time() - t_fc_start
             print(f"[PIPELINE] Firecrawl completed in {fc_duration:.2f}s")
             log_discovery_step(status="Firecrawl completed")
+            if pipeline_id:
+                complete_stage(pipeline_id, "scraping")
+                start_stage(pipeline_id, "news_search")
             
             # 2. NewsAPI Search Recent Articles
             t_news_start = time.time()
@@ -113,6 +212,9 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
             news_duration = time.time() - t_news_start
             print(f"[PIPELINE] News search completed in {news_duration:.2f}s")
             log_discovery_step(status="News search completed")
+            if pipeline_id:
+                complete_stage(pipeline_id, "news_search")
+                start_stage(pipeline_id, "contact_finding")
             
             headlines_list = [art.get("title") for art in news_data if art.get("title")]
             news_headlines_str = " | ".join(headlines_list[:5]) if headlines_list else None
@@ -128,6 +230,12 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
                 
             hunter_duration = time.time() - t_hunter_start
             print(f"[PIPELINE] Hunter completed in {hunter_duration:.2f}s")
+            if pipeline_id:
+                complete_stage(pipeline_id, "contact_finding")
+                start_stage(pipeline_id, "trigger_extraction")
+
+            # bs4-based employee count scrape
+            bs4_employee_count = scrape_employee_count(url)
             
             # 4. Groq Unified LLM Analysis
             t_groq_start = time.time()
@@ -139,6 +247,9 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
                 
             groq_duration = time.time() - t_groq_start
             print("[PIPELINE] Groq prompt generated")
+            if pipeline_id:
+                complete_stage(pipeline_id, "trigger_extraction")
+                start_stage(pipeline_id, "icp_qualification")
             
             # 5. Save/Update Company
             is_new = True
@@ -173,7 +284,7 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
                 company.summary = analysis.get("summary")
                 company.status = "updated"
                 company.industry = analysis.get("industry") or company.industry or "AI / SaaS"
-                company.employee_count = analysis.get("employee_estimate") or company.employee_count
+                company.employee_count = analysis.get("employee_estimate") or bs4_employee_count or company.employee_count
                 company.firecrawl_used = firecrawl_used
                 company.news_used = news_used
                 company.news_headlines = news_headlines_str
@@ -192,13 +303,17 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
                     summary=analysis.get("summary"),
                     status="new",
                     industry=analysis.get("industry") or "AI / SaaS",
-                    employee_count=analysis.get("employee_estimate"),
+                    employee_count=analysis.get("employee_estimate") or bs4_employee_count,
                     firecrawl_used=firecrawl_used,
                     news_used=news_used,
                     news_headlines=news_headlines_str,
                     discovery_timestamp=datetime.utcnow()
                 )
                 db.add(company)
+            
+            if pipeline_id:
+                complete_stage(pipeline_id, "icp_qualification")
+                start_stage(pipeline_id, "saving")
             
             db.flush() # To get company.id or apply updates
             log_discovery_step(status="Company saved")
@@ -264,6 +379,10 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
             )
             db.add(log_entry)
             
+            if pipeline_id:
+                complete_stage(pipeline_id, "saving")
+                complete_pipeline(pipeline_id)
+            
             db.commit()
             log_discovery_step(status="Contacts saved")
             
@@ -295,6 +414,8 @@ def process_discovery(company_inputs: list, force_refresh: bool, db: Session) ->
             
         except Exception as e:
             db.rollback()
+            if pipeline_id:
+                fail_pipeline(pipeline_id, str(e))
             print(f"[ORCHESTRATOR ERROR] {e}")
             traceback.print_exc()
             results.append({
